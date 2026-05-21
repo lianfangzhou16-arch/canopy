@@ -46,6 +46,22 @@ services:
 #        limits:
 #          memory: 2G
 #          cpus: "1.0"
+
+  quant-center:
+    container_name: quant-center
+    build:
+      context: ..
+      dockerfile: plugin/python/Dockerfile.quant
+    depends_on:
+      - node-1
+    env_file:
+      - ../.env
+    volumes:
+      - ../configs:/app/configs
+      - ../logs:/app/logs
+    networks:
+      - canopy
+
 #  node-3:
 #    container_name: node-3
 #    build:

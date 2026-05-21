@@ -63,15 +63,27 @@ class CommandCenter:
         w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url, request_kwargs=request_kwargs))
         account = Account.from_key(pk)
 
+        attempt = 0
         while self.is_running:
             try:
                 async with self.semaphore:
+                    # Deterministic Output: Combined block and balance check
                     block = await w3.eth.block_number
-                    logger.info(f"[{note}] {account.address[:8]}... | Block: {block} | Mode: {self.mode}")
+                    balance_wei = await w3.eth.get_balance(account.address)
+                    balance_eth = w3.from_wei(balance_wei, 'ether')
+
+                    logger.info(f"[{note}] {account.address[:8]}... | Block: {block} | Balance: {balance_eth:.4f} | Mode: {self.mode}")
+
+                attempt = 0 # Reset on success
                 await asyncio.sleep(15)
+
             except Exception as e:
-                logger.error(f"[{note}] Error: {str(e)}")
-                await asyncio.sleep(5)
+                logger.error(f"[{note}] Network Error: {str(e)}")
+                attempt += 1
+                # Network Robustness: Exponential backoff
+                wait_time = min(2 ** attempt, 60)
+                logger.info(f"[{note}] Exponential backoff: waiting {wait_time}s...")
+                await asyncio.sleep(wait_time)
 
     async def run(self):
         logger.info(f"Command Center Live | Accounts: {len(self.wallets)}")
