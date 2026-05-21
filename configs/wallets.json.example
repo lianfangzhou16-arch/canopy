@@ -1,0 +1,12 @@
+[
+  {
+    "private_key": "0x您的私钥1",
+    "proxy": "http://user:pass@ip1:port",
+    "note": "账号1"
+  },
+  {
+    "private_key": "0x您的私钥2",
+    "proxy": "http://user:pass@ip2:port",
+    "note": "账号2"
+  }
+]

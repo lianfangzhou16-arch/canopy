@@ -1,19 +1,18 @@
 import os
-import sys
+import json
 import asyncio
 import signal
 import logging
 import argparse
-from typing import NoReturn
+from typing import List, Dict
 from dotenv import load_dotenv
 from colorama import init, Fore, Style
 from web3 import AsyncWeb3
 from web3.providers import AsyncHTTPProvider
+from eth_account import Account
 
-# Initialize colorama
 init(autoreset=True)
 
-# --- Configuration & Philosophy ---
 class Web3Formatter(logging.Formatter):
     def format(self, record):
         if record.levelno >= logging.ERROR:
@@ -26,17 +25,9 @@ class Web3Formatter(logging.Formatter):
 
 logger = logging.getLogger("CommandCenter")
 logger.setLevel(logging.INFO)
-
-# Stream Handler (Colored)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(Web3Formatter())
-logger.addHandler(stream_handler)
-
-# File Handler (Persistent logs)
-os.makedirs("logs", exist_ok=True)
-file_handler = logging.FileHandler("logs/command_center.log")
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(file_handler)
+sh = logging.StreamHandler()
+sh.setFormatter(Web3Formatter())
+logger.addHandler(sh)
 
 class CommandCenter:
     def __init__(self, mode: str):
@@ -44,73 +35,67 @@ class CommandCenter:
         self.mode = mode
         self.is_running = True
         self.rpc_url = os.getenv("RPC_URL", "https://testnet.rpc.neuraprotocol.io/")
-        self.w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url))
         self.semaphore = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_REQUESTS", 5)))
+        self.wallets = self._load_wallets()
 
-        # State Idempotency: Placeholder for transaction tracking
-        self.executed_hashes = set()
+    def _load_wallets(self) -> List[Dict]:
+        path = "configs/wallets.json"
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+        pk = os.getenv("PRIVATE_KEY")
+        if pk and pk != "your_private_key_here":
+            return [{"private_key": pk, "proxy": None, "note": "Default"}]
+        return []
 
-    def handle_exit(self, signum, frame):
-        """Engineering Standard: Perfect Signal Exit Mechanism"""
-        logger.warning(f"Interrupt received (Signal: {signum}). Initiating graceful shutdown...")
-        self.is_running = False
+    async def monitor_wallet(self, wallet_info: Dict):
+        pk = wallet_info['private_key']
+        proxy = wallet_info.get('proxy')
+        note = wallet_info.get('note', 'Unknown')
 
-    async def exponential_backoff(self, attempt: int):
-        """Network Robustness: Exponential Backoff"""
-        wait_time = min(2 ** attempt, 60)
-        logger.info(f"Retrying in {wait_time}s...")
-        await asyncio.sleep(wait_time)
+        request_kwargs = {'proxy': proxy} if proxy else {}
+        w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url, request_kwargs=request_kwargs))
+        account = Account.from_key(pk)
 
-    async def get_block_number(self):
-        """Engineering Standard: Concurrency Control via Semaphore"""
-        async with self.semaphore:
-            return await self.w3.eth.block_number
-
-    async def monitor_network(self):
-        """Production Mode Loop"""
-        logger.info(f"Command Center started in {self.mode.upper()} mode.")
-        logger.info(f"Connected to RPC: {self.rpc_url}")
-
-        attempt = 0
         while self.is_running:
             try:
-                # Deterministic Output: Full logic block using AsyncWeb3
-                block_number = await self.get_block_number()
-                logger.info(f"Current Block: {block_number}")
-                attempt = 0 # Reset on success
-
-                # Logic path remains intuitive and single-responsibility
-                await asyncio.sleep(10)
-
+                async with self.semaphore:
+                    block = await w3.eth.block_number
+                    logger.info(f"[{note}] {account.address[:8]}... | Block: {block} | Mode: {self.mode}")
+                await asyncio.sleep(15)
             except Exception as e:
-                logger.error(f"Network error detected: {str(e)}")
-                attempt += 1
-                await self.exponential_backoff(attempt)
+                logger.error(f"[{note}] Error: {str(e)}")
+                await asyncio.sleep(5)
 
     async def run(self):
-        # Register signals
+        logger.info(f"Command Center Live | Accounts: {len(self.wallets)}")
+
         loop = asyncio.get_running_loop()
         for s in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(s, lambda: asyncio.create_task(self.shutdown()))
 
+        tasks = [self.monitor_wallet(w) for w in self.wallets]
+        if not tasks:
+            logger.error("No active wallets to monitor. Check .env or configs/wallets.json")
+            return
+
         try:
-            await self.monitor_network()
-        except (KeyboardInterrupt, asyncio.CancelledError):
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
             pass
         finally:
             logger.info("Command Center offline. Zero-Failure Execution maintained.")
 
     async def shutdown(self):
-        logger.warning("Shutdown signal received. Initiating graceful exit...")
+        logger.warning("Shutdown received. Closing all circuits...")
         self.is_running = False
-        # Cancel all pending tasks
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        for task in tasks:
-            task.cancel()
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task():
+                task.cancel()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Web3 Quant Command Center")
-    parser.add_argument("--mode", choices=["production", "development"], default="development")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", default="development")
     args = parser.parse_args()
 
     center = CommandCenter(mode=args.mode)

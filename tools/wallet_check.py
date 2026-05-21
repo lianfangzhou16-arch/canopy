@@ -1,7 +1,8 @@
 import os
+import json
 import asyncio
 import logging
-from typing import Optional
+from typing import List, Dict
 from decimal import Decimal
 from dotenv import load_dotenv
 from web3 import AsyncWeb3
@@ -13,8 +14,6 @@ from colorama import init, Fore, Style
 # Initialize colorama
 init(autoreset=True)
 
-# --- Configuration & Philosophy ---
-# Log Art: [✅] (Success), [⚠️] (Risk/Skip), [🔥] (Fatal/Stop)
 class Web3Formatter(logging.Formatter):
     def format(self, record):
         if record.levelno >= logging.ERROR:
@@ -25,80 +24,64 @@ class Web3Formatter(logging.Formatter):
             prefix = f"{Fore.GREEN}[✅] {Style.NORMAL}"
         return f"{prefix}{record.getMessage()}{Style.RESET_ALL}"
 
-logger = logging.getLogger("Web3Quant")
+logger = logging.getLogger("WalletCheck")
 logger.setLevel(logging.INFO)
-
-# Stream Handler (Colored)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(Web3Formatter())
-logger.addHandler(stream_handler)
-
-# File Handler (Persistent logs)
-os.makedirs("logs", exist_ok=True)
-file_handler = logging.FileHandler("logs/wallet_check.log")
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(file_handler)
-
-# --- Web3 Iron Laws Implementation ---
+sh = logging.StreamHandler()
+sh.setFormatter(Web3Formatter())
+logger.addHandler(sh)
 
 class WalletMonitor:
     def __init__(self):
         load_dotenv()
         self.rpc_url = os.getenv("RPC_URL", "https://testnet.rpc.neuraprotocol.io/")
-        self.private_key = os.getenv("PRIVATE_KEY")
-        self.w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url))
         self.semaphore = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_REQUESTS", 5)))
+        self.wallets = self._load_wallets()
 
-    def pre_flight_check(self, balance_wei: int, required_wei: int, fee_wei: int, margin_wei: int) -> bool:
-        """
-        Iron Law: Pre-flight Balance Check
-        current_balance > (required_amount + priority_fee + safety_margin)
-        """
-        total_needed = required_wei + fee_wei + margin_wei
-        return balance_wei > total_needed
+    def _load_wallets(self) -> List[Dict]:
+        path = "configs/wallets.json"
+        if not os.path.exists(path):
+            # Fallback to .env for single wallet
+            pk = os.getenv("PRIVATE_KEY")
+            if pk and pk != "your_private_key_here":
+                return [{"private_key": pk, "proxy": None, "note": "Default"}]
+            return []
+        with open(path, 'r') as f:
+            return json.load(f)
 
-    async def get_balance(self, address: str) -> int:
-        async with self.semaphore:
-            return await self.w3.eth.get_balance(address)
+    async def check_wallet(self, wallet_info: Dict):
+        pk = wallet_info['private_key']
+        proxy = wallet_info.get('proxy')
+        note = wallet_info.get('note', 'Unknown')
 
-    async def check_wallet(self, required_amount_eth: float = 0.0):
-        if not self.private_key or self.private_key == "your_private_key_here":
-            logger.error("Environment Isolation Violation: Private key not found in .env")
-            return
+        # Setup provider with proxy if exists
+        request_kwargs = {}
+        if proxy:
+            request_kwargs['proxy'] = proxy
+
+        w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url, request_kwargs=request_kwargs))
 
         try:
-            account = Account.from_key(self.private_key)
-            address = account.address
-            logger.info(f"Checking Wallet: {address}")
+            async with self.semaphore:
+                account = Account.from_key(pk)
+                balance_wei = await w3.eth.get_balance(account.address)
+                balance_eth = w3.from_wei(balance_wei, 'ether')
 
-            balance_wei = await self.get_balance(address)
-            balance_eth = self.w3.from_wei(balance_wei, 'ether')
+                status = "PASSED" if balance_wei > 0 else "EMPTY"
+                color = Fore.GREEN if balance_wei > 0 else Fore.YELLOW
 
-            logger.info(f"Current Balance: {balance_eth} {os.getenv('SYMBOL', 'ANKR')}")
+                logger.info(f"[{note}] {account.address} | Balance: {balance_eth} | Proxy: {proxy or 'Direct'}")
 
-            # Define margins and fees
-            margin_eth = Decimal(os.getenv("SAFETY_MARGIN_ETH", "0.01"))
-            fee_gwei = Decimal(os.getenv("PRIORITY_FEE_GWEI", "1.5"))
-            # Estimated gas for simple transfer (21000)
-            estimated_fee_wei = self.w3.to_wei(fee_gwei, 'gwei') * 21000
-
-            required_wei = self.w3.to_wei(Decimal(str(required_amount_eth)), 'ether')
-            margin_wei = self.w3.to_wei(margin_eth, 'ether')
-
-            if self.pre_flight_check(balance_wei, int(required_wei), int(estimated_fee_wei), int(margin_wei)):
-                logger.info("Pre-flight Balance Check PASSED")
-            else:
-                logger.warning(f"Pre-flight Balance Check FAILED: Insufficient funds for safe execution.")
-                logger.warning(f"Needed (incl. margin): {self.w3.from_wei(int(required_wei + estimated_fee_wei + margin_wei), 'ether')} ETH")
-
-        except Web3Exception as e:
-            logger.error(f"Network Robustness Error: {str(e)}")
         except Exception as e:
-            logger.error(f"Fatal Execution Error: {str(e)}")
+            logger.error(f"[{note}] Failed: {str(e)}")
 
-async def main():
-    monitor = WalletMonitor()
-    await monitor.check_wallet()
+    async def run_all(self):
+        if not self.wallets:
+            logger.error("No wallets found in configs/wallets.json or .env")
+            return
+
+        tasks = [self.check_wallet(w) for w in self.wallets]
+        await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    monitor = WalletMonitor()
+    asyncio.run(monitor.run_all())
