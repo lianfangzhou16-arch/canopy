@@ -38,15 +38,23 @@ class WalletMonitor:
         self.wallets = self._load_wallets()
 
     def _load_wallets(self) -> List[Dict]:
-        path = "configs/wallets.json"
-        if not os.path.exists(path):
-            # Fallback to .env for single wallet
-            pk = os.getenv("PRIVATE_KEY")
-            if pk and pk != "your_private_key_here":
-                return [{"private_key": pk, "proxy": None, "note": "Default"}]
-            return []
-        with open(path, 'r') as f:
-            return json.load(f)
+        """
+        Iron Law: Environment Isolation
+        Mandatory use of .env via os.getenv.
+        """
+        # Priority 1: Multi-wallet JSON path from .env
+        wallet_path = os.getenv("WALLETS_JSON_PATH")
+        if wallet_path and os.path.exists(wallet_path):
+            with open(wallet_path, 'r') as f:
+                return json.load(f)
+
+        # Priority 2: Single private key fallback from .env
+        pk = os.getenv("PRIVATE_KEY")
+        if pk and pk != "your_private_key_here":
+            return [{"private_key": pk, "proxy": os.getenv("GLOBAL_PROXY"), "note": "Default"}]
+
+        logger.warning("No configuration found in os.getenv('WALLETS_JSON_PATH') or os.getenv('PRIVATE_KEY')")
+        return []
 
     async def check_wallet(self, wallet_info: Dict):
         pk = wallet_info['private_key']

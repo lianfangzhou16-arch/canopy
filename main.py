@@ -39,13 +39,19 @@ class CommandCenter:
         self.wallets = self._load_wallets()
 
     def _load_wallets(self) -> List[Dict]:
-        path = "configs/wallets.json"
-        if os.path.exists(path):
-            with open(path, 'r') as f:
+        """
+        Iron Law: Environment Isolation
+        Configuration must be driven by os.getenv()
+        """
+        wallet_path = os.getenv("WALLETS_JSON_PATH")
+        if wallet_path and os.path.exists(wallet_path):
+            with open(wallet_path, 'r') as f:
                 return json.load(f)
+
         pk = os.getenv("PRIVATE_KEY")
         if pk and pk != "your_private_key_here":
-            return [{"private_key": pk, "proxy": None, "note": "Default"}]
+            return [{"private_key": pk, "proxy": os.getenv("GLOBAL_PROXY"), "note": "Default"}]
+
         return []
 
     async def monitor_wallet(self, wallet_info: Dict):
