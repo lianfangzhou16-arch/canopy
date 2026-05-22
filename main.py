@@ -58,9 +58,10 @@ class CommandCenter:
         pk = wallet_info['private_key']
         proxy = wallet_info.get('proxy')
         note = wallet_info.get('note', 'Unknown')
+        rpc_url = wallet_info.get('rpc_url', self.rpc_url)
 
         request_kwargs = {'proxy': proxy} if proxy else {}
-        w3 = AsyncWeb3(AsyncHTTPProvider(self.rpc_url, request_kwargs=request_kwargs))
+        w3 = AsyncWeb3(AsyncHTTPProvider(rpc_url, request_kwargs=request_kwargs))
         account = Account.from_key(pk)
 
         attempt = 0

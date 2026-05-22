@@ -1,47 +1,61 @@
-# 🚀 Neura 指挥中心：首席架构师级运行指南
+# 🚀 Neura 顶级多节点指挥部：Windows 实战指南
 
-您指出的非常对！在顶级工程实践中，我们将系统分为 **基础设施层 (Node)** 和 **业务逻辑层 (Quant Center)**。为了实现完美解耦，我为您构建了 **Docker 双服务架构**。
-
----
-
-## 1. 核心架构说明
-
-现在，您可以直接通过 Docker 一键启动整个量化生态：
-*   **服务 1: `node-1`** — Neura 协议节点（负责同步区块、提供数据）。
-*   **服务 2: `quant-center`** — Python 指挥中心（负责盯着钱包、代理 IP 监控）。
+您提出的 **多节点 + 独立代理** 方案是 Web3 大户（Whale）的标准配置。这种架构实现了物理级别的隔离，确保账号 A 的任何波动都不会影响账号 B。
 
 ---
 
-## 2. 怎么运行？ (Docker 一键式)
+## 1. 准备工作 (Windows PowerShell)
 
-### 第一步：配置您的“仪表盘”
-1.  把根目录下的 `.env.example` 改名为 **`.env`**，填入私钥。
-2.  如果您有多号需求，修改 `configs/wallets.json`。
+在启动 Docker 之前，我们需要在 D 盘创建好对应的数据文件夹。请以管理员身份打开 **PowerShell**，运行以下命令：
 
-### 第二步：一键启动全家桶
-在项目根目录下，直接运行：
+```powershell
+# 一键创建所有节点目录
+New-Item -ItemType Directory -Force -Path "D:\neura_evm_nodes\node_1"
+New-Item -ItemType Directory -Force -Path "D:\neura_evm_nodes\node_2"
+New-Item -ItemType Directory -Force -Path "D:\neura_evm_nodes\node_3"
+New-Item -ItemType Directory -Force -Path "D:\neura_evm_nodes\docker"
+```
+
+---
+
+## 2. 核心架构：1 对 1 绑定模式
+
+在我的重构下，系统现在支持 **“1 个钱包 -> 1 个独立节点 -> 1 个独立代理 IP”** 的完美闭环。
+
+### 配置步骤：
+1.  **编辑 `.env`**：设置基础环境。
+2.  **编辑 `configs/wallets.json`**：为每个号分配节点地址。
+    *   账号 1 连本地节点 1：`"rpc_url": "http://localhost:50002"`
+    *   账号 2 连本地节点 2：`"rpc_url": "http://localhost:40002"`
+    *   账号 3 连本地节点 3：`"rpc_url": "http://localhost:30002"`
+3.  **编辑 `docker-compose.yaml`**：
+    *   我已经为您写好了模板。请在 `neura-node-2` 和 `neura-node-3` 的 `environment` 部分，填入您购买的静态 IP 代理信息。
+
+---
+
+## 3. 一键启动全家桶
+
+在项目根目录下运行：
 ```bash
 make docker/up
 ```
-*   **发生了什么？**：Docker 会同时启动 Neura 节点和您的 Python 机器人。机器人会自动等待节点准备就绪。
 
-### 第三步：查看实时日志
-*   **看节点状态**：`docker logs -f node-1`
-*   **看机器人监控**：`docker logs -f quant-center`
-
----
-
-## 3. 为什么这样分层？
-
-1.  **独立扩容**：如果以后你要跑 1000 个号，你可以只增加 `quant-center` 的容器，而不需要重启节点。
-2.  **网络隔离**：机器人和节点在同一个内部网络 (`canopy`) 运行，通信更快、更安全。
-3.  **零污染**：所有的 Python 环境都锁在容器里，不会弄乱你本机的系统。
+### 运行后您的电脑将呈现以下状态：
+*   **Docker 内部**：3 个 Neura 节点同时同步，其中 2 个通过代理 IP 出口。
+*   **Python 机器人**：1 个机器人同时开启 3 个线程，分别对应 3 个节点进行监控。
+*   **日志展示**：
+    ```text
+    [账号1] 0x123... | Block: 9441724 | Balance: 10.5 | Node: 50002 (直连)
+    [账号2] 0x456... | Block: 9441724 | Balance: 88.2 | Node: 40002 (代理A)
+    [账号3] 0x789... | Block: 9441724 | Balance: 5.1  | Node: 30002 (代理B)
+    ```
 
 ---
 
-## 🛡️ 首席工程师的最后叮嘱：
+## 🛡️ 首席架构师的深度建议
 
-*   **同步状态**：节点启动后需要一点时间同步区块，机器人刚开始可能会报 `Network Error`，这是正常的，它会自动执行 **指数退避重试**，直到节点完全就绪。
-*   **代理 IP**：依然在 `configs/wallets.json` 里配置。容器会带着你的代理配置直接出发。
+1.  **磁盘空间**：由于跑了 3 个节点，请确保 D 盘有足够的空间（建议 500GB 以上 SSD）。
+2.  **内存占用**：3 个节点约占用 6-8GB 内存。如果电脑配置不够，可以先注释掉 `node-3`。
+3.  **代理稳定性**：静态 IP 代理如果断开，对应的节点会停止同步。机器人的 **指数退避重试** 机制会不断尝试重连，直到代理恢复。
 
-**现在，运行 `make docker/up`，见证您的 Web3 全自动化指挥部起航！**
+**这套方案让您的操作完全不可被项目方关联。现在，请执行 PowerShell 命令创建文件夹并开启您的多节点帝国吧！**
