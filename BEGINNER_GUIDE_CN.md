@@ -55,4 +55,11 @@
 
 ---
 
+### 🌟 进阶：如果你已经在跑其他节点 (多节点共存)
+如果你电脑里已经有一个 Canopy 节点在跑，为了不搞混，请使用我为你专门设计的“隔离模式”启动：
+```bash
+docker compose -f .docker/docker-compose.konnex.yaml -p konnex up -d
+```
+这样，你的 Konnex 节点会跑在 **60002** 端口，而原有节点继续在 **50002** 端口，互不干扰，完美共存！具体原理请看 `KONNEX_ISOLATION_GUIDE.md`。
+
 **大功告成！你现在已经是 Konnex 网络的一员了。**

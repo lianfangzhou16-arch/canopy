@@ -1,0 +1,22 @@
+services:
+  konnex-node:
+    container_name: konnex-node
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    ports:
+      - 60000:50000 # Wallet
+      - 60001:50001 # Explorer
+      - 60002:50002 # RPC (Konnex Specific)
+      - 60003:50003 # Admin RPC
+      - 9010:9001   # TCP P2P
+      - 9099:9090   # Metrics
+    networks:
+      - konnex_net
+    command: ["start"]
+    volumes:
+      - ./volumes/konnex_node:/root/.canopy
+
+networks:
+  konnex_net:
+    driver: bridge
