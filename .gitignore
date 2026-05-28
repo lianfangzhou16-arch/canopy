@@ -38,6 +38,8 @@ vendor
 .docker/.env
 .docker/volumes/
 .env
+configs/wallets.json
+logs/*.log
 
 .docs/TIMELOG.md
 .docs/WISHLIST.md

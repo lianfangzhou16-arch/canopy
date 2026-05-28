@@ -1,75 +1,85 @@
-services:
-  node-1:
-    container_name: node-1
-    build:
-      context: ..
-      dockerfile: .docker/Dockerfile
-    ports:
-      - 50000:50000 # Wallet
-      - 50001:50001 # Explorer
-      - 50002:50002 # RPC
-      - 50003:50003 # Admin RPC
-      - 9001:9001   # TCP P2P
-      - 6060:6060   # Debug
-      - 9090:9090   # Metrics
-    networks:
-      - canopy
-    command: ["start"]
-    volumes:
-      - ./volumes/node_1:/root/.canopy
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 2G
-#          cpus: "1.0"
+version: '3.8'
 
-  node-2:
-    container_name: node-2
+services:
+  # ----------------------------------------------------
+  # 节点 1：绑定钱包地址 1（本地网络直接连，无代理）
+  # ----------------------------------------------------
+  neura-node-1:
+    image: canopy_work-canopy-node:latest
+    container_name: neura-node-1
+    restart: always
+    ports:
+      - "50000:50000"
+      - "50001:50001"
+      - "50002:50002" # RPC 端口
+      - "9001:9001"   # P2P 端口
+    volumes:
+      - D:/neura_evm_nodes/node_1:/root/.canopy
+    command: ["start"]
+
+  # ----------------------------------------------------
+  # 节点 2：绑定钱包地址 2（走静态IP代理，强隔离）
+  # ----------------------------------------------------
+  neura-node-2:
+    image: canopy_work-canopy-node:latest
+    container_name: neura-node-2
+    restart: always
+    ports:
+      - "40000:40000"
+      - "40001:40001"
+      - "40002:40002" # 区分 RPC 端口
+      - "9002:9002"   # 区分 P2P 端口
+    environment:
+      # 顶级安全：注入全局网络出口代理
+      - HTTP_PROXY=http://用户名:你的密码@你的代理IP:50100
+      - HTTPS_PROXY=http://用户名:你的密码@你的代理IP:50100
+      - ALL_PROXY=socks5://用户名:你的密码@你的代理IP:50100
+    volumes:
+      - D:/neura_evm_nodes/node_2:/root/.canopy
+    command: ["start"]
+
+  # ----------------------------------------------------
+  # 节点 3：绑定钱包地址 3（走静态IP代理，强隔离）
+  # ----------------------------------------------------
+  neura-node-3:
+    image: canopy_work-canopy-node:latest
+    container_name: neura-node-3
+    restart: always
+    ports:
+      - "30000:30000"
+      - "30001:30001"
+      - "30002:30002" # 区分 RPC 端口
+      - "9003:9003"   # 区分 P2P 端口
+    environment:
+      - HTTP_PROXY=http://用户名:你的密码@你的代理IP:50100
+      - HTTPS_PROXY=http://用户名:你的密码@你的代理IP:50100
+      - ALL_PROXY=socks5://用户名:你的密码@你的代理IP:50100
+    volumes:
+      - D:/neura_evm_nodes/node_3:/root/.canopy
+    command: ["start"]
+
+  # ----------------------------------------------------
+  # 量化指挥中心 (Python)
+  # ----------------------------------------------------
+  quant-center:
     build:
       context: ..
-      dockerfile: .docker/Dockerfile
-    ports:
-      - 40000:40000 # Wallet
-      - 40001:40001 # Explorer
-      - 40002:40002 # RPC
-      - 40003:40003 # Admin RPC
-      - 9002:9002   # TCP P2P
-      - 6061:6060   # Debug
-      - 9091:9091   # Metrics
-    networks:
-      - canopy
-    command: ["start"]
+      dockerfile: plugin/python/Dockerfile.quant
+    container_name: quant-center
+    depends_on:
+      - neura-node-1
+      - neura-node-2
+      - neura-node-3
+    env_file:
+      - ../.env
     volumes:
-      - ./volumes/node_2:/root/.canopy
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 2G
-#          cpus: "1.0"
-#  node-3:
-#    container_name: node-3
-#    build:
-#      context: ..
-#      dockerfile: .docker/Dockerfile
-#      args:
-#        BUILD_PATH: cmd/cli
-#    ports:
-#      - 30000:30000 # Wallet
-#      - 30001:30001 # Explorer
-#      - 30002:30002 # RPC
-#      - 30003:30003 # Admin RPC
-#      - 9003:9003   # TCP P2P
-#    networks:
-#      - canopy
-#    command: ["start"]
-#    volumes:
-#      - ./volumes/node_3:/root/.canopy
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 2G
-#          cpus: "1.0"
+      - ../configs:/app/configs
+      - ../logs:/app/logs
+    # 自动连接到节点网络
+    networks:
+      - default
 
 networks:
-  canopy:
+  default:
+    name: neura_evm_net
     driver: bridge

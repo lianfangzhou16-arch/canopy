@@ -1,0 +1,20 @@
+[
+  {
+    "private_key": "0x您的私钥1",
+    "rpc_url": "http://localhost:50002",
+    "proxy": null,
+    "note": "账号1-本地节点1"
+  },
+  {
+    "private_key": "0x您的私钥2",
+    "rpc_url": "http://localhost:40002",
+    "proxy": "http://user:pass@ip1:port",
+    "note": "账号2-中转节点2"
+  },
+  {
+    "private_key": "0x您的私钥3",
+    "rpc_url": "http://localhost:30002",
+    "proxy": "http://user:pass@ip2:port",
+    "note": "账号3-代理节点3"
+  }
+]
