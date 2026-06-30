@@ -44,3 +44,26 @@ vendor
 cmd/web/explorer/.idea
 **/.DS_Store
 /cmd/tps/data
+
+# Sensitive information
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+secrets.json
+.env*
+!*.env.example
+
+# Development artifacts
+.history/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+.venv/
+venv/
+
+# Local configuration
+config.json
